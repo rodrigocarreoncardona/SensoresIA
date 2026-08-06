@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from typing import List
 import pandas as pd
 import numpy as np
 import os
 import glob
+import shutil
 from sklearn.ensemble import RandomForestRegressor
 
 # Inicializamos la API
@@ -128,3 +130,46 @@ def ejecutar_prediccion():
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ocurrió un error interno: {str(e)}")
+
+@app.post("/subir-y-procesar")
+async def subir_y_procesar(archivos: List[UploadFile] = File(...)):
+    """
+    Endpoint que recibe archivos, los guarda en la carpeta 'data' 
+    y ejecuta el ciclo completo de procesamiento y predicción.
+    """
+    # Nos aseguramos de que la carpeta exista antes de intentar guardar
+    os.makedirs(CARPETA_DATOS, exist_ok=True)
+    
+    archivos_guardados = []
+    
+    # Guardamos cada archivo recibido en la carpeta local
+    for archivo in archivos:
+        ruta_destino = os.path.join(CARPETA_DATOS, archivo.filename)
+        try:
+            # Se abre el archivo de destino en modo "wb" (Write Binary)
+            with open(ruta_destino, "wb") as buffer:
+                # Se copia el flujo de bytes (stream) directamente, sin convertir a strings
+                shutil.copyfileobj(archivo.file, buffer)
+            archivos_guardados.append(archivo.filename)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al guardar {archivo.filename}: {str(e)}")
+        finally:
+            archivo.file.close()
+
+    # Una vez guardados los archivos, reutilizamos la lógica de tu código base
+    try:
+        datos_nuevos, base_de_datos = procesar_y_guardar_archivos(CARPETA_DATOS)
+        resultados_comparativos = entrenar_ia_y_predecir(base_de_datos, datos_nuevos)
+        
+        return {
+            "estado": "exito",
+            "mensaje": f"Se subieron {len(archivos_guardados)} archivos nuevos y se actualizaron las predicciones.",
+            "archivos_subidos": archivos_guardados,
+            "registros_totales_bd": len(base_de_datos),
+            "predicciones": resultados_comparativos
+        }
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ocurrió un error interno al procesar: {str(e)}")
