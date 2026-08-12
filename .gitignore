@@ -1,1 +1,3 @@
 base_datos_sensores.json
+__pycache__/
+*.pyc
