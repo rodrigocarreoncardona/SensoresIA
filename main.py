@@ -174,3 +174,97 @@ async def subir_y_procesar(archivos: List[UploadFile] = File(...)):
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ocurrió un error interno al procesar: {str(e)}")
+
+@app.get("/archivos")
+def listar_archivos():
+    """
+    Endpoint que devuelve una lista con los nombres de los archivos 
+    guardados actualmente en la carpeta 'data'.
+    """
+    # Si la carpeta no existe aún, devolvemos una lista vacía
+    if not os.path.exists(CARPETA_DATOS):
+        return {"estado": "exito", "archivos": []}
+    
+    # Leemos el contenido del directorio
+    todos_los_archivos = os.listdir(CARPETA_DATOS)
+    
+    # Filtramos para mostrar solo los archivos de datos válidos, ignorando carpetas u otros formatos
+    archivos_validos = [f for f in todos_los_archivos if f.lower().endswith(('.csv', '.xlsx', '.xls'))]
+    
+    return {
+        "estado": "exito",
+        "total": len(archivos_validos),
+        "archivos": archivos_validos
+    }
+ 
+@app.post("/archivos/subir")
+async def subir_archivos(archivos: List[UploadFile] = File(...)):
+    """
+    Endpoint que únicamente recibe archivos y los guarda en el servidor.
+    No ejecuta ningún procesamiento ni entrenamiento de la IA.
+    """
+    # Nos aseguramos de que la carpeta exista antes de intentar guardar
+    os.makedirs(CARPETA_DATOS, exist_ok=True)
+    
+    archivos_guardados = []
+    
+    # Guardamos cada archivo recibido en la carpeta local
+    for archivo in archivos:
+        ruta_destino = os.path.join(CARPETA_DATOS, archivo.filename)
+        try:
+            # Se abre el archivo de destino en modo "wb" (Write Binary)
+            with open(ruta_destino, "wb") as buffer:
+                # Se copia el flujo de bytes (stream) directamente
+                shutil.copyfileobj(archivo.file, buffer)
+            archivos_guardados.append(archivo.filename)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al guardar {archivo.filename}: {str(e)}")
+        finally:
+            archivo.file.close()
+
+    # Retornamos el éxito de la operación sin procesar los datos
+    return {
+        "estado": "exito",
+        "mensaje": f"Se guardaron {len(archivos_guardados)} archivos correctamente en el servidor.",
+        "archivos_subidos": archivos_guardados
+    }
+
+@app.delete("/archivos/{nombre_archivo}")
+def eliminar_archivo(nombre_archivo: str):
+    """
+    Endpoint que elimina un archivo del servidor y actualiza el JSON
+    para remover los datos huérfanos.
+    """
+    ruta_archivo = os.path.join(CARPETA_DATOS, nombre_archivo)
+    
+    if not os.path.exists(ruta_archivo):
+        raise HTTPException(status_code=404, detail=f"El archivo '{nombre_archivo}' no existe en el servidor.")
+        
+    try:
+        # 1. Eliminamos el archivo físicamente del disco
+        os.remove(ruta_archivo)
+        
+        # 2. Revisamos si aún quedan archivos en la carpeta
+        patron_csv = os.path.join(CARPETA_DATOS, '*.csv')
+        patron_xlsx = os.path.join(CARPETA_DATOS, '*.xlsx')
+        archivos_restantes = glob.glob(patron_csv) + glob.glob(patron_xlsx)
+        
+        # 3. Actualizamos la base de datos
+        if archivos_restantes:
+            # Si quedan archivos, reconstruimos el JSON sin el archivo borrado
+            procesar_y_guardar_archivos(CARPETA_DATOS)
+            mensaje_bd = "Base de datos JSON actualizada."
+        else:
+            # Si la carpeta quedó vacía, eliminamos también el JSON
+            if os.path.exists(ARCHIVO_BD):
+                os.remove(ARCHIVO_BD)
+            mensaje_bd = "No quedan archivos. Base de datos JSON vaciada."
+
+        return {
+            "estado": "exito", 
+            "mensaje": f"Archivo '{nombre_archivo}' eliminado. {mensaje_bd}"
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno al intentar eliminar o actualizar: {str(e)}")
