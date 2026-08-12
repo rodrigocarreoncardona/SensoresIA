@@ -42,20 +42,24 @@ def procesar_y_guardar_archivos(carpeta_datos):
 
         df_limpio = pd.DataFrame()
 
+        df.columns = df.columns.str.lower()
+
         # Detectar el formato por sus columnas
-        if 'Unnamed: 0' in df.columns or 'Irradiance' in str(df.columns):
+        if 'unnamed: 0' in df.columns or 'irradiance' in df.columns:
             df_limpio['Lux'] = df.iloc[:, 0]
             df_limpio['Irradiancia'] = df.iloc[:, 1]
             df_limpio['Corriente'] = df.iloc[:, 2]
             df_limpio['Voltaje'] = df.iloc[:, 3]
             df_limpio['T_Panel'] = df.iloc[:, -1]
             
-        elif 'Lux' in df.columns or 'lux' in df.columns.str.lower():
-            df_limpio['Lux'] = df['Lux']
-            df_limpio['Irradiancia'] = df['Irradiancia']
-            df_limpio['Corriente'] = df['Corr'] if 'Corr' in df.columns else df['Corriente']
-            df_limpio['Voltaje'] = df['Voltaje']
-            df_limpio['T_Panel'] = df['T_Panel']
+        elif 'lux' in df.columns:
+            df_limpio['Lux'] = df['lux']
+            df_limpio['Irradiancia'] = df['irradiancia']
+            
+            df_limpio['Corriente'] = df['corr'] if 'corr' in df.columns else df['corriente']
+            
+            df_limpio['Voltaje'] = df['voltaje']
+            df_limpio['T_Panel'] = df['t_panel']
         else:
             continue
 
@@ -71,17 +75,14 @@ def procesar_y_guardar_archivos(carpeta_datos):
     if not lista_dfs_limpios:
         raise ValueError("No se pudo extraer información válida de ninguno de los archivos.")
 
-    df_nuevos_combinados = pd.concat(lista_dfs_limpios, ignore_index=True)
+    # Combinamos todos los archivos que existen ACTUALMENTE en la carpeta
+    df_total = pd.concat(lista_dfs_limpios, ignore_index=True)
 
-    # Lógica de Base de Datos (JSON)
-    if os.path.exists(ARCHIVO_BD):
-        df_historico = pd.read_json(ARCHIVO_BD)
-        df_total = pd.concat([df_historico, df_nuevos_combinados]).drop_duplicates()
-    else:
-        df_total = df_nuevos_combinados
-
+    # Sobrescribimos el JSON por completo para sincronizarlo con los archivos físicos
     df_total.to_json(ARCHIVO_BD, orient='records', indent=4)
-    return df_nuevos_combinados, df_total
+    
+    # Retornamos df_total dos veces para no romper las funciones de entrenamiento
+    return df_total, df_total
 
 def entrenar_ia_y_predecir(df_historico, df_nuevo):
     """Entrena el modelo y devuelve las predicciones en formato diccionario."""
