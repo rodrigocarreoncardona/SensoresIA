@@ -5,10 +5,7 @@ import numpy as np
 import os
 import glob
 import shutil
-import uuid
-import json
 from sklearn.ensemble import RandomForestRegressor
-from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 # Inicializamos la API
 app = FastAPI(
@@ -20,14 +17,6 @@ DIRECTORIO_BASE = "/home/site/wwwroot" if "WEBSITE_SITE_NAME" in os.environ else
 
 ARCHIVO_BD = os.path.join(DIRECTORIO_BASE, 'base_datos_sensores.json')
 CARPETA_DATOS = os.path.join(DIRECTORIO_BASE, 'data')
-CARPETA_RESULTADOS = os.path.join(DIRECTORIO_BASE, 'resultados')
-
-# Cadena de conexión a tu Azure Service Bus (se leerá de las variables de entorno)
-SERVICE_BUS_CONN_STR = os.environ.get("SERVICE_BUS_CONN_STR", "")
-NOMBRE_COLA = "cola-predicciones"
-
-os.makedirs(CARPETA_DATOS, exist_ok=True)
-os.makedirs(CARPETA_RESULTADOS, exist_ok=True)
 
 def procesar_y_guardar_archivos(carpeta_datos):
     """Busca, limpia y agrega múltiples archivos (CSV/XLSX) a la base de datos JSON."""
@@ -126,28 +115,24 @@ def entrenar_ia_y_predecir(df_historico, df_nuevo):
 @app.post("/procesar-predicciones")
 def ejecutar_prediccion():
     """
-    Delega el procesamiento pesado al Worker en segundo plano 
-    y retorna un ID de tarea de inmediato.
+    Endpoint que lee la carpeta, actualiza el JSON histórico, 
+    entrena el modelo y devuelve la comparativa de predicciones.
     """
-    if not SERVICE_BUS_CONN_STR:
-        raise HTTPException(status_code=500, detail="Falta la cadena de conexión del Service Bus.")
-
-    tarea_id = str(uuid.uuid4())
-    
     try:
-        # Enviar mensaje a la cola
-        with ServiceBusClient.from_connection_string(SERVICE_BUS_CONN_STR) as client:
-            with client.get_queue_sender(queue_name=NOMBRE_COLA) as sender:
-                mensaje = ServiceBusMessage(tarea_id)
-                sender.send_messages(mensaje)
+        datos_nuevos, base_de_datos = procesar_y_guardar_archivos(CARPETA_DATOS)
+        resultados_comparativos = entrenar_ia_y_predecir(base_de_datos, datos_nuevos)
         
         return {
-            "estado": "procesando",
-            "tarea_id": tarea_id,
-            "mensaje": "Los datos están siendo analizados por la IA en segundo plano."
+            "estado": "exito",
+            "mensaje": "Modelo entrenado y predicciones generadas correctamente.",
+            "registros_totales_bd": len(base_de_datos),
+            "predicciones": resultados_comparativos
         }
+        
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al encolar la tarea: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ocurrió un error interno: {str(e)}")
 
 @app.post("/subir-y-procesar")
 async def subir_y_procesar(archivos: List[UploadFile] = File(...)):
@@ -285,23 +270,3 @@ def eliminar_archivo(nombre_archivo: str):
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno al intentar eliminar o actualizar: {str(e)}")
-
-@app.get("/resultados/{tarea_id}")
-def obtener_resultados(tarea_id: str):
-    """
-    Permite consultar si el Worker ya terminó de generar las predicciones.
-    """
-    ruta_resultado = os.path.join(CARPETA_RESULTADOS, f"{tarea_id}.json")
-    
-    if os.path.exists(ruta_resultado):
-        with open(ruta_resultado, "r") as archivo:
-            datos = json.load(archivo)
-        return {
-            "estado": "completado",
-            "predicciones": datos
-        }
-    else:
-        return {
-            "estado": "procesando",
-            "mensaje": "La IA sigue calculando..."
-        }

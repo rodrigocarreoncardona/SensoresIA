@@ -6,4 +6,3 @@ numpy
 scikit-learn
 openpyxl
 python-multipart
-azure-servicebus
