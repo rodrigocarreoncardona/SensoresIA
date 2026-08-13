@@ -51,9 +51,9 @@ def procesar_y_guardar_archivos(carpeta_datos):
             
         try:
             if ruta_archivo.lower().endswith('.csv'):
-                df = pd.read_csv(ruta_archivo)
+                df = pd.read_csv(ruta_archivo, engine="calamine")
             else:
-                df = pd.read_excel(ruta_archivo)
+                df = pd.read_excel(ruta_archivo, engine="calamine")
         except Exception:
             continue
 
