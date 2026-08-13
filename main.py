@@ -87,13 +87,27 @@ def procesar_y_guardar_archivos(carpeta_datos):
     return df_total, df_total
 
 def entrenar_ia_y_predecir(df_historico, df_nuevo):
-    """Entrena el modelo y devuelve las predicciones en formato diccionario."""
-    X = df_historico[['Lux', 'Irradiancia', 'T_Panel']]
-    y = df_historico[['Voltaje', 'Corriente']]
+    """Entrena el modelo limitando la muestra y devuelve las predicciones."""
+    
+    # --- NUEVA LÓGICA DE OPTIMIZACIÓN ---
+    LIMITE_MUESTRA = 50000
+    
+    # Si el historial tiene más registros que nuestro límite, tomamos una muestra aleatoria
+    if len(df_historico) > LIMITE_MUESTRA:
+        df_entrenamiento = df_historico.sample(n=LIMITE_MUESTRA, random_state=42)
+    else:
+        df_entrenamiento = df_historico.copy()
+    # ------------------------------------
 
+    # Usamos el DataFrame optimizado para separar X y y
+    X = df_entrenamiento[['Lux', 'Irradiancia', 'T_Panel']]
+    y = df_entrenamiento[['Voltaje', 'Corriente']]
+
+    # El modelo ahora se entrenará mucho más rápido
     modelo = RandomForestRegressor(n_estimators=100, random_state=42)
     modelo.fit(X, y)
 
+    # Las predicciones de muestra siguen usando los datos NUEVOS (los últimos 10)
     muestra_prueba = df_nuevo.tail(10).copy()
     entradas_para_predecir = muestra_prueba[['Lux', 'Irradiancia', 'T_Panel']]
     
