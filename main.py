@@ -13,8 +13,10 @@ app = FastAPI(
     description="Procesa datos de sensores y genera predicciones de voltaje y corriente."
 )
 
-ARCHIVO_BD = 'base_datos_sensores.json'
-CARPETA_DATOS = 'data'
+DIRECTORIO_BASE = "/home/site/wwwroot" if "WEBSITE_SITE_NAME" in os.environ else "."
+
+ARCHIVO_BD = os.path.join(DIRECTORIO_BASE, 'base_datos_sensores.json')
+CARPETA_DATOS = os.path.join(DIRECTORIO_BASE, 'data')
 
 def procesar_y_guardar_archivos(carpeta_datos):
     """Busca, limpia y agrega múltiples archivos (CSV/XLSX) a la base de datos JSON."""
