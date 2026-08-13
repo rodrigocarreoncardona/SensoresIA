@@ -6,11 +6,26 @@ import os
 import glob
 import shutil
 from sklearn.ensemble import RandomForestRegressor
+from fastapi.middleware.cors import CORSMiddleware
 
 # Inicializamos la API
 app = FastAPI(
     title="API de Predicción de Paneles Solares",
     description="Procesa datos de sensores y genera predicciones de voltaje y corriente."
+)
+
+# Define los orígenes permitidos
+origins = [
+    "http://localhost:5173",
+    "https://panelesiasycita.vercel.app/",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"], # Permite GET, POST, DELETE, etc.
+    allow_headers=["*"], # Permite todos los headers (esencial para los archivos multipart)
 )
 
 DIRECTORIO_BASE = "/home/site/wwwroot" if "WEBSITE_SITE_NAME" in os.environ else "."
