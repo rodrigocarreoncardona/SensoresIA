@@ -102,10 +102,11 @@ def procesar_y_guardar_archivos(carpeta_datos):
     return df_total, df_total
 
 def entrenar_ia_y_predecir(df_historico, df_nuevo):
-    """Entrena el modelo limitando la muestra y devuelve las predicciones."""
+    """Entrena el modelo con parámetros optimizados para hardware limitado."""
     
-    # --- NUEVA LÓGICA DE OPTIMIZACIÓN ---
-    LIMITE_MUESTRA = 50000
+    # 1. Reducimos la muestra. 10,000 registros son más que suficientes 
+    # para encontrar los patrones físicos entre irradiancia, temperatura y voltaje.
+    LIMITE_MUESTRA = 10000
     
     # Si el historial tiene más registros que nuestro límite, tomamos una muestra aleatoria
     if len(df_historico) > LIMITE_MUESTRA:
@@ -118,8 +119,16 @@ def entrenar_ia_y_predecir(df_historico, df_nuevo):
     X = df_entrenamiento[['Lux', 'Irradiancia', 'T_Panel']]
     y = df_entrenamiento[['Voltaje', 'Corriente']]
 
-    # El modelo ahora se entrenará mucho más rápido
-    modelo = RandomForestRegressor(n_estimators=100, random_state=42)
+    # 2. OPTIMIZACIÓN DEL MODELO 
+    # - n_estimators=30: Construye 30 árboles en lugar de 100 (3 veces más rápido).
+    # - max_depth=12: Evita que los árboles crezcan infinitamente, ahorrando muchísima RAM.
+    # - n_jobs=1: Fuerza el uso de 1 solo hilo, evitando que la CPU se bloquee a sí misma.
+    modelo = RandomForestRegressor(
+        n_estimators=30, 
+        max_depth=12,
+        n_jobs=1,
+        random_state=42
+    )
     modelo.fit(X, y)
 
     # Las predicciones de muestra siguen usando los datos NUEVOS (los últimos 10)
